@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\Orders\RelationManagers;
 
+use App\Enums\OrderItemSplitMode;
 use App\Enums\OrderItemStatus;
 use App\Models\Product;
 use Filament\Actions\CreateAction;
@@ -108,6 +109,20 @@ class ItemsRelationManager extends RelationManager
                 TextColumn::make('unit_price')
                     ->money(config('deco.currency', 'ARS'))
                     ->label('Precio'),
+                TextColumn::make('participant_label')
+                    ->label('Nombre (cuenta)')
+                    ->placeholder('—')
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('split_mode')
+                    ->label('Reparto')
+                    ->formatStateUsing(function ($state): string {
+                        if ($state instanceof OrderItemSplitMode) {
+                            return $state->label();
+                        }
+
+                        return OrderItemSplitMode::tryFrom((string) $state)?->label() ?? '—';
+                    })
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('target_station')
                     ->label('Estación')
                     ->formatStateUsing(fn ($state) => $state === 'kitchen' ? 'Cocina' : 'Barra'),

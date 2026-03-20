@@ -6,6 +6,7 @@ use App\Enums\QrAccessStatus;
 use App\Enums\TableStatus;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Schema;
 
 class RestaurantTableForm
@@ -48,6 +49,10 @@ class RestaurantTableForm
                     ->default(QrAccessStatus::Active->value)
                     ->required()
                     ->helperText('Solo «Activa» permite usar el QR de mesa. Inactiva o suspendida bloquea pedidos desde QR.'),
+                Toggle::make('menu_public_ordering_enabled')
+                    ->label('Permitir pedidos desde la carta (QR)')
+                    ->helperText('Si está apagado, los clientes solo ven la carta. El mozo puede cambiarlo también desde Mapa operativo.')
+                    ->default(false),
                 TextInput::make('pos_x')
                     ->required()
                     ->numeric()

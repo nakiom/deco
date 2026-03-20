@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\OrderItemSplitMode;
 use App\Enums\OrderItemStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -16,6 +17,9 @@ class OrderItem extends Model
         'quantity',
         'unit_price',
         'notes',
+        'participant_label',
+        'split_mode',
+        'shared_with_labels',
         'target_station',
         'status',
         'fired_at',
@@ -27,6 +31,8 @@ class OrderItem extends Model
     {
         return [
             'status' => OrderItemStatus::class,
+            'split_mode' => OrderItemSplitMode::class,
+            'shared_with_labels' => 'array',
             'unit_price' => 'decimal:2',
             'fired_at' => 'datetime',
             'ready_at' => 'datetime',

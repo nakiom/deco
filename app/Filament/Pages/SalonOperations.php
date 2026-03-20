@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 namespace App\Filament\Pages;
 
+use App\Enums\OrderItemSplitMode;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
 use App\Enums\TableStatus;
 use App\Models\FloorPlan;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\Restaurant;
 use App\Models\RestaurantTable;
+use App\Services\SplitBillSummary;
 use BackedEnum;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -37,6 +40,8 @@ class SalonOperations extends Page
     public string $billDiscount = '0';
 
     public ?string $billPaymentMethod = null;
+
+    public bool $menuPublicOrderingEnabled = false;
 
     public static function getNavigationGroup(): ?string
     {
@@ -67,11 +72,35 @@ class SalonOperations extends Page
         $this->selectedTableId = $tableId;
         $this->billDiscount = '0';
         $this->billPaymentMethod = null;
+
+        $t = RestaurantTable::query()
+            ->where('restaurant_id', $restaurant->id)
+            ->whereKey($tableId)
+            ->first();
+        $this->menuPublicOrderingEnabled = (bool) ($t?->menu_public_ordering_enabled ?? false);
     }
 
     public function closeBillPanel(): void
     {
         $this->selectedTableId = null;
+        $this->menuPublicOrderingEnabled = false;
+    }
+
+    public function updatedMenuPublicOrderingEnabled(mixed $value): void
+    {
+        if (! auth()->user()?->can('tables.update')) {
+            return;
+        }
+
+        $restaurant = $this->resolveRestaurant();
+        if (! $restaurant || ! $this->selectedTableId) {
+            return;
+        }
+
+        RestaurantTable::query()
+            ->where('restaurant_id', $restaurant->id)
+            ->whereKey($this->selectedTableId)
+            ->update(['menu_public_ordering_enabled' => (bool) $value]);
     }
 
     /**
@@ -289,16 +318,21 @@ class SalonOperations extends Page
         $lines = [];
         foreach ($orders as $order) {
             foreach ($order->items as $item) {
+                $notes = $item->notes !== null && $item->notes !== '' ? trim((string) $item->notes) : null;
                 $lines[] = [
                     'product_name' => $item->product?->name ?? '—',
                     'quantity' => (int) $item->quantity,
                     'unit_price' => (float) $item->unit_price,
                     'line_total' => round((float) $item->unit_price * (int) $item->quantity, 2),
+                    'participant_line' => $this->lineParticipantSummary($item),
+                    'line_notes' => $notes,
                 ];
             }
         }
 
         $subtotal = (float) $orders->sum(fn (Order $o): float => (float) $o->subtotal);
+
+        $participantSplit = SplitBillSummary::totalsByParticipant($orders);
 
         return [
             'table' => [
@@ -312,7 +346,27 @@ class SalonOperations extends Page
             'lines' => $lines,
             'subtotal' => round($subtotal, 2),
             'has_open_orders' => $orders->isNotEmpty(),
+            'menu_public_ordering_enabled' => (bool) $table->menu_public_ordering_enabled,
+            'participant_split' => $participantSplit,
+            'participant_split_sum' => SplitBillSummary::sumTotals($participantSplit),
         ];
+    }
+
+    private function lineParticipantSummary(OrderItem $item): string
+    {
+        $mode = $item->split_mode instanceof OrderItemSplitMode
+            ? $item->split_mode
+            : OrderItemSplitMode::tryFrom((string) $item->split_mode) ?? OrderItemSplitMode::Individual;
+
+        if ($mode === OrderItemSplitMode::SharedEqual) {
+            $names = is_array($item->shared_with_labels) ? $item->shared_with_labels : [];
+
+            return 'Compartido: '.implode(', ', array_map(static fn ($n): string => (string) $n, $names));
+        }
+
+        return $item->participant_label !== null && $item->participant_label !== ''
+            ? (string) $item->participant_label
+            : 'Sin asignar';
     }
 
     /**

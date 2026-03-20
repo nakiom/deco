@@ -33,6 +33,7 @@ class RestaurantTable extends Model
         'qr_public_uuid',
         'qr_secret_hash',
         'qr_access_status',
+        'menu_public_ordering_enabled',
         'pos_x',
         'pos_y',
         'width',
@@ -48,6 +49,7 @@ class RestaurantTable extends Model
         return [
             'status' => TableStatus::class,
             'qr_access_status' => QrAccessStatus::class,
+            'menu_public_ordering_enabled' => 'boolean',
             'pos_x' => 'decimal:2',
             'pos_y' => 'decimal:2',
             'width' => 'decimal:2',

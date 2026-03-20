@@ -221,9 +221,23 @@ class CartaController extends Controller
             'categories' => $this->categoriesForRestaurant($restaurant),
             'menuQrKitchenStatusUrl' => $this->kitchenStatusUrl($qrUuid, $secret, $legacyToken),
             'menuQrCallWaiterUrl' => $this->callWaiterUrl($qrUuid, $secret, $legacyToken),
+            'menuOrderingEnabled' => $table->menu_public_ordering_enabled,
+            'menuOrderSubmitUrl' => $this->menuOrderSubmitUrl($qrUuid, $secret, $legacyToken),
             'kitchenReadyOrderId' => $kitchenReadyOrder?->id,
             'kitchenReadyInitial' => $kitchenReadyOrder !== null,
         ]);
+    }
+
+    private function menuOrderSubmitUrl(?string $qrUuid, ?string $secret, ?string $legacyToken): ?string
+    {
+        if ($qrUuid !== null && $secret !== null) {
+            return route('menu.order.submit', ['qrUuid' => $qrUuid, 'secret' => $secret]);
+        }
+        if ($legacyToken !== null) {
+            return route('menu.order.submit.legacy', ['legacyToken' => $legacyToken]);
+        }
+
+        return null;
     }
 
     private function kitchenStatusUrl(?string $qrUuid, ?string $secret, ?string $legacyToken): string

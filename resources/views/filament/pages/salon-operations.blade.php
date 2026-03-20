@@ -7,6 +7,7 @@
         $payload = $this->getOperationalPayload();
         $canBill = auth()->user()?->can('orders.update');
         $canFreeTable = auth()->user()?->can('tables.update');
+        $canToggleMenuOrders = auth()->user()?->can('tables.update');
     @endphp
 
     <div class="ops-wrap" wire:poll.5s>
@@ -105,6 +106,12 @@
                                     · {{ $bill['orders_count'] }} pedido(s) abierto(s)
                                 @endif
                             </p>
+                            @if($canToggleMenuOrders)
+                                <label class="bill-menu-toggle mt-3 flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                                    <input type="checkbox" wire:model.live="menuPublicOrderingEnabled" class="rounded border-slate-300 text-primary-600 focus:ring-primary-500" />
+                                    <span>Clientes pueden pedir desde la carta (QR)</span>
+                                </label>
+                            @endif
                         </div>
                         <button type="button" wire:click="closeBillPanel" class="bill-close" aria-label="Cerrar">×</button>
                     </div>
@@ -115,7 +122,13 @@
                             <ul class="bill-line-list">
                                 @foreach($bill['lines'] as $line)
                                     <li class="bill-line">
-                                        <span class="bill-line-name">{{ $line['product_name'] }} × {{ $line['quantity'] }}</span>
+                                        <span class="bill-line-name">
+                                            {{ $line['product_name'] }} × {{ $line['quantity'] }}
+                                            <span class="bill-line-part block text-xs font-normal text-slate-500">{{ $line['participant_line'] ?? '' }}</span>
+                                            @if(!empty($line['line_notes']))
+                                                <span class="bill-line-notes mt-0.5 block text-xs italic text-slate-500">{{ $line['line_notes'] }}</span>
+                                            @endif
+                                        </span>
                                         <span class="bill-line-price">${{ number_format($line['line_total'], 2, ',', '.') }}</span>
                                     </li>
                                 @endforeach
@@ -124,6 +137,20 @@
                                 <span>Subtotal</span>
                                 <span>${{ number_format($bill['subtotal'], 2, ',', '.') }}</span>
                             </div>
+                            @if(!empty($bill['participant_split']))
+                                <div class="bill-participant-split mt-4 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+                                    <p class="bill-section-label mb-2">Resumen por persona (estimado)</p>
+                                    <ul class="space-y-1 text-sm">
+                                        @foreach($bill['participant_split'] as $name => $amount)
+                                            <li class="flex justify-between gap-2">
+                                                <span class="text-slate-700">{{ $name }}</span>
+                                                <span class="font-medium text-slate-900">${{ number_format($amount, 2, ',', '.') }}</span>
+                                            </li>
+                                        @endforeach
+                                    </ul>
+                                    <p class="mt-2 text-xs text-slate-500">Los ítems compartidos se reparten en partes iguales. El total puede diferir unos centavos por redondeo.</p>
+                                </div>
+                            @endif
                         </div>
 
                         @if($canBill)

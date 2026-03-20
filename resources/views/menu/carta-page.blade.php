@@ -41,12 +41,16 @@
     $tagPillLoose = $isDarkBg ? 'bg-stone-800 text-stone-300' : 'bg-stone-100 text-stone-600';
     $tableBanner = $isDarkBg ? 'border-stone-600 bg-stone-900/80' : 'border-stone-200/60 bg-white/70';
     $footerBorder = $isDarkBg ? 'border-stone-700' : 'border-stone-200/80';
+
+    $menuOrderingEnabled = $menuOrderingEnabled ?? false;
+    $menuOrderSubmitUrl = $menuOrderSubmitUrl ?? null;
 @endphp
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $restaurant->name }} — Carta</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -126,7 +130,21 @@
             </div>
         @endif
 
-        @if(!empty($menuQrKitchenStatusUrl) && !empty($menuQrCallWaiterUrl) && isset($table))
+        @if($menuOrderingEnabled && $menuOrderSubmitUrl && isset($table))
+            <div class="mb-5 rounded-2xl border px-4 py-3 text-sm {{ $tableBanner }}">
+                <label for="deco-participant-name" class="block text-left font-medium menu-text-muted mb-1">Tu nombre (para dividir la cuenta)</label>
+                <input
+                    type="text"
+                    id="deco-participant-name"
+                    maxlength="120"
+                    placeholder="Ej. Ana"
+                    class="w-full rounded-xl border {{ $cardBorder }} bg-white/90 dark:bg-stone-950/50 px-3 py-2 text-stone-900 dark:text-stone-100"
+                />
+                <p class="mt-1.5 text-xs menu-text-muted text-left">Se guarda en este dispositivo. Agregá platos al pedido y enviá todo junto a cocina cuando confirmes.</p>
+            </div>
+        @endif
+
+        @if(isset($table) && !empty($menuQrKitchenStatusUrl))
             @php
                 $ksUrl = $menuQrKitchenStatusUrl;
             @endphp
@@ -185,32 +203,352 @@
                     }, 12000);
                 })();
             </script>
+        @endif
 
-            @php
-                $callWaiterUrl = $menuQrCallWaiterUrl;
-            @endphp
-            @if(session('waiter_call_feedback'))
-                <div class="mb-4 rounded-2xl border px-4 py-3 text-center text-sm {{ $isDarkBg ? 'border-amber-500/40 bg-amber-950/50 text-amber-100' : 'border-amber-200 bg-amber-50 text-amber-950' }}">
-                    {{ session('waiter_call_feedback') }}
-                </div>
-            @endif
+        @if(isset($table) && session('waiter_call_feedback'))
+            <div class="mb-4 rounded-2xl border px-4 py-3 text-center text-sm {{ $isDarkBg ? 'border-amber-500/40 bg-amber-950/50 text-amber-100' : 'border-amber-200 bg-amber-50 text-amber-950' }}">
+                {{ session('waiter_call_feedback') }}
+            </div>
+        @endif
+
+        @if(isset($table) && ((!empty($menuQrCallWaiterUrl)) || ($menuOrderingEnabled && $menuOrderSubmitUrl)))
             <div
-                class="fixed bottom-0 left-0 right-0 z-50 border-t border-black/10 bg-white/95 px-4 py-3 shadow-[0_-8px_30px_rgba(0,0,0,.08)] backdrop-blur-md dark:border-white/10 dark:bg-stone-900/95 sm:px-6"
+                class="fixed bottom-0 left-0 right-0 z-50 flex flex-col border-black/10 shadow-[0_-8px_30px_rgba(0,0,0,.08)] backdrop-blur-md dark:border-white/10"
                 style="padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));"
             >
-                <form method="post" action="{{ $callWaiterUrl }}" class="mx-auto flex max-w-lg justify-center">
-                    @csrf
-                    <button
-                        type="submit"
-                        class="flex w-full touch-manipulation items-center justify-center gap-2 rounded-2xl px-4 py-3.5 text-sm font-semibold text-white shadow-lg transition hover:brightness-110 active:scale-[0.99] sm:text-base"
-                        style="background: var(--menu-accent);"
+                @if($menuOrderingEnabled && $menuOrderSubmitUrl)
+                    <div
+                        id="deco-cart-dock"
+                        class="hidden border-t border-black/10 bg-white/98 px-4 py-3 dark:border-white/10 dark:bg-stone-900/98 sm:px-6"
                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0 opacity-95" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
-                        Llamar al mozo
-                    </button>
-                </form>
+                        <div class="mx-auto max-w-lg">
+                            <p class="text-xs font-semibold text-stone-600 dark:text-stone-300">
+                                Pedido pendiente de envío · <span id="deco-cart-count">0</span> ítem(s)
+                            </p>
+                            <ul id="deco-cart-lines" class="mt-2 max-h-36 space-y-2 overflow-y-auto text-sm text-stone-800 dark:text-stone-200"></ul>
+                            <div class="mt-3 flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    id="deco-cart-clear"
+                                    class="rounded-xl border border-stone-300 px-3 py-2 text-xs font-semibold text-stone-700 dark:border-stone-600 dark:text-stone-200"
+                                >
+                                    Vaciar
+                                </button>
+                                <button
+                                    type="button"
+                                    id="deco-cart-submit"
+                                    class="min-w-0 flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:brightness-110"
+                                    style="background: var(--menu-accent);"
+                                >
+                                    Enviar pedido a cocina
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                @endif
+                @if(!empty($menuQrCallWaiterUrl))
+                    <div class="border-t border-black/10 bg-white/95 px-4 py-3 dark:border-white/10 dark:bg-stone-900/95 sm:px-6">
+                        <form method="post" action="{{ $menuQrCallWaiterUrl }}" class="mx-auto flex max-w-lg justify-center">
+                            @csrf
+                            <button
+                                type="submit"
+                                class="flex w-full touch-manipulation items-center justify-center gap-2 rounded-2xl px-4 py-3.5 text-sm font-semibold text-white shadow-lg transition hover:brightness-110 active:scale-[0.99] sm:text-base"
+                                style="background: var(--menu-accent);"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0 opacity-95" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
+                                Llamar al mozo
+                            </button>
+                        </form>
+                    </div>
+                @endif
             </div>
-            <div class="h-24 shrink-0" aria-hidden="true"></div>
+            <div class="h-40 shrink-0" aria-hidden="true"></div>
+        @endif
+
+        @if($menuOrderingEnabled && $menuOrderSubmitUrl && isset($table))
+            <dialog id="deco-menu-order-dialog" class="max-w-md w-[calc(100%-2rem)] rounded-2xl border border-stone-200 bg-white p-0 shadow-2xl backdrop:bg-black/40">
+                <form method="dialog" class="border-b border-stone-100 px-4 py-3 flex justify-between items-center">
+                    <h2 id="deco-order-dialog-title" class="text-base font-semibold text-stone-900" style="font-family: var(--font-display);">Agregar al pedido</h2>
+                    <button type="submit" value="cancel" class="text-stone-500 text-xl leading-none" aria-label="Cerrar">×</button>
+                </form>
+                <div class="px-4 py-3 space-y-3 text-sm text-stone-800">
+                    <p class="text-stone-600 text-xs" id="deco-order-product-title"></p>
+                    <div class="block">
+                        <span class="text-xs font-medium text-stone-600">Cantidad</span>
+                        <div class="mt-1 flex max-w-[12rem] items-center gap-2">
+                            <button
+                                type="button"
+                                id="deco-qty-minus"
+                                class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-stone-300 text-lg font-semibold text-stone-700 active:bg-stone-100 dark:border-stone-600 dark:text-stone-200 dark:active:bg-stone-800"
+                                aria-label="Menos"
+                            >−</button>
+                            <input
+                                type="number"
+                                id="deco-order-qty"
+                                inputmode="numeric"
+                                min="1"
+                                max="99"
+                                value="1"
+                                class="min-w-0 flex-1 rounded-lg border border-stone-200 px-2 py-2 text-center text-base font-semibold tabular-nums dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100"
+                            />
+                            <button
+                                type="button"
+                                id="deco-qty-plus"
+                                class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-stone-300 text-lg font-semibold text-stone-700 active:bg-stone-100 dark:border-stone-600 dark:text-stone-200 dark:active:bg-stone-800"
+                                aria-label="Más"
+                            >+</button>
+                        </div>
+                    </div>
+                    <label class="block">
+                        <span class="text-xs font-medium text-stone-600">Notas para cocina o barra <span class="font-normal text-stone-400">(opcional)</span></span>
+                        <textarea
+                            id="deco-order-notes"
+                            rows="2"
+                            maxlength="500"
+                            placeholder="Ej. sin cebolla, bien cocido…"
+                            class="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm placeholder:text-stone-400 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100"
+                        ></textarea>
+                    </label>
+                    <fieldset class="space-y-2">
+                        <legend class="text-xs font-medium text-stone-600">Tipo</legend>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="deco-split-mode" value="individual" checked class="accent-orange-600" />
+                            <span>Para mí (nombre abajo)</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="deco-split-mode" value="shared_equal" class="accent-orange-600" />
+                            <span>Compartir en partes iguales</span>
+                        </label>
+                    </fieldset>
+                    <label class="block" id="deco-order-participant-wrap">
+                        <span class="text-xs font-medium text-stone-600">Nombre (este consumo)</span>
+                        <input type="text" id="deco-order-participant" maxlength="120" class="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2" />
+                    </label>
+                    <label class="block hidden" id="deco-order-shared-wrap">
+                        <span class="text-xs font-medium text-stone-600">Entre quiénes se divide (coma o salto de línea, mínimo 2)</span>
+                        <textarea id="deco-order-shared" rows="3" class="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2" placeholder="Juan, María, Pedro"></textarea>
+                    </label>
+                </div>
+                <div class="px-4 py-3 border-t border-stone-100 flex gap-2 justify-end">
+                    <button type="button" id="deco-order-cancel" class="rounded-xl px-4 py-2 text-sm font-medium text-stone-600 border border-stone-200">Cancelar</button>
+                    <button type="button" id="deco-order-add-cart" class="rounded-xl px-4 py-2 text-sm font-semibold text-white" style="background: var(--menu-accent);">Agregar al pedido</button>
+                </div>
+            </dialog>
+            <div id="deco-menu-toast" class="fixed bottom-44 left-1/2 z-[60] hidden max-w-sm -translate-x-1/2 rounded-xl border border-emerald-600/30 bg-emerald-50 px-4 py-3 text-sm text-emerald-950 shadow-lg" role="status"></div>
+            <script>
+                (function () {
+                    const submitUrl = @json($menuOrderSubmitUrl);
+                    const storageKey = 'deco_menu_participant_{{ $table->id }}';
+                    const nameInput = document.getElementById('deco-participant-name');
+                    const dialog = document.getElementById('deco-menu-order-dialog');
+                    const toast = document.getElementById('deco-menu-toast');
+                    const cartDock = document.getElementById('deco-cart-dock');
+                    const cartLinesEl = document.getElementById('deco-cart-lines');
+                    const cartCountEl = document.getElementById('deco-cart-count');
+                    if (!submitUrl || !dialog || !nameInput) return;
+
+                    /** @type {Array<{id:string,product_id:number,product_name:string,quantity:number,split_mode:string,participant_label:string|null,shared_with_labels:string[],notes:string}>} */
+                    let decoCart = [];
+
+                    function clampQty(n) {
+                        n = parseInt(String(n), 10);
+                        if (Number.isNaN(n) || n < 1) return 1;
+                        if (n > 99) return 99;
+                        return n;
+                    }
+
+                    function bindQtySteppers() {
+                        const inp = document.getElementById('deco-order-qty');
+                        const minus = document.getElementById('deco-qty-minus');
+                        const plus = document.getElementById('deco-qty-plus');
+                        if (!inp || !minus || !plus) return;
+                        minus.addEventListener('click', function () {
+                            inp.value = String(clampQty((parseInt(inp.value, 10) || 1) - 1));
+                        });
+                        plus.addEventListener('click', function () {
+                            inp.value = String(clampQty((parseInt(inp.value, 10) || 1) + 1));
+                        });
+                        inp.addEventListener('change', function () {
+                            inp.value = String(clampQty(inp.value));
+                        });
+                    }
+                    bindQtySteppers();
+
+                    function cartLineCount() {
+                        return decoCart.reduce(function (n, l) { return n + l.quantity; }, 0);
+                    }
+
+                    function renderCart() {
+                        if (!cartDock || !cartLinesEl || !cartCountEl) return;
+                        const n = cartLineCount();
+                        cartCountEl.textContent = String(n);
+                        if (decoCart.length === 0) {
+                            cartDock.classList.add('hidden');
+                            cartLinesEl.innerHTML = '';
+                            return;
+                        }
+                        cartDock.classList.remove('hidden');
+                        cartLinesEl.innerHTML = '';
+                        decoCart.forEach(function (line) {
+                            const li = document.createElement('li');
+                            li.className = 'flex items-start justify-between gap-2 rounded-lg border border-stone-200/80 bg-white/60 px-2 py-1.5 dark:border-stone-600 dark:bg-stone-800/60';
+                            const left = document.createElement('div');
+                            left.className = 'min-w-0 flex-1';
+                            const title = document.createElement('div');
+                            title.className = 'font-medium text-stone-900 dark:text-stone-100';
+                            title.textContent = line.product_name + ' × ' + line.quantity;
+                            const sub = document.createElement('div');
+                            sub.className = 'text-xs text-stone-500 dark:text-stone-400';
+                            if (line.split_mode === 'shared_equal') {
+                                sub.textContent = 'Compartido: ' + (line.shared_with_labels || []).join(', ');
+                            } else {
+                                sub.textContent = line.participant_label || '—';
+                            }
+                            left.appendChild(title);
+                            left.appendChild(sub);
+                            if (line.notes && line.notes.trim() !== '') {
+                                const noteEl = document.createElement('div');
+                                noteEl.className = 'mt-1 text-xs italic text-stone-600 dark:text-stone-400';
+                                noteEl.textContent = 'Nota: ' + line.notes.trim();
+                                left.appendChild(noteEl);
+                            }
+                            const rm = document.createElement('button');
+                            rm.type = 'button';
+                            rm.className = 'shrink-0 text-xs font-semibold text-red-600 dark:text-red-400';
+                            rm.textContent = 'Quitar';
+                            rm.setAttribute('data-cart-id', line.id);
+                            rm.addEventListener('click', function () {
+                                decoCart = decoCart.filter(function (x) { return x.id !== line.id; });
+                                renderCart();
+                            });
+                            li.appendChild(left);
+                            li.appendChild(rm);
+                            cartLinesEl.appendChild(li);
+                        });
+                    }
+
+                    try {
+                        const saved = localStorage.getItem(storageKey);
+                        if (saved) nameInput.value = saved;
+                    } catch (e) {}
+                    nameInput.addEventListener('change', function () {
+                        try { localStorage.setItem(storageKey, nameInput.value.trim()); } catch (e) {}
+                    });
+
+                    let currentProductId = null;
+                    document.querySelectorAll('.menu-deco-add').forEach(function (btn) {
+                        btn.addEventListener('click', function () {
+                            currentProductId = parseInt(btn.getAttribute('data-product-id'), 10);
+                            const title = btn.getAttribute('data-product-name') || '';
+                            document.getElementById('deco-order-product-title').textContent = title;
+                            document.getElementById('deco-order-qty').value = '1';
+                            const notesEl = document.getElementById('deco-order-notes');
+                            if (notesEl) notesEl.value = '';
+                            document.querySelector('input[name="deco-split-mode"][value="individual"]').checked = true;
+                            document.getElementById('deco-order-participant').value = nameInput.value.trim();
+                            document.getElementById('deco-order-shared').value = '';
+                            document.getElementById('deco-order-participant-wrap').classList.remove('hidden');
+                            document.getElementById('deco-order-shared-wrap').classList.add('hidden');
+                            dialog.showModal();
+                        });
+                    });
+                    document.querySelectorAll('input[name="deco-split-mode"]').forEach(function (r) {
+                        r.addEventListener('change', function () {
+                            const shared = document.querySelector('input[name="deco-split-mode"]:checked').value === 'shared_equal';
+                            document.getElementById('deco-order-participant-wrap').classList.toggle('hidden', shared);
+                            document.getElementById('deco-order-shared-wrap').classList.toggle('hidden', !shared);
+                        });
+                    });
+                    document.getElementById('deco-order-cancel').addEventListener('click', function () { dialog.close(); });
+                    document.getElementById('deco-order-add-cart').addEventListener('click', function () {
+                        const qty = clampQty(document.getElementById('deco-order-qty').value);
+                        document.getElementById('deco-order-qty').value = String(qty);
+                        const notesRaw = (document.getElementById('deco-order-notes') && document.getElementById('deco-order-notes').value) || '';
+                        const notesTrim = notesRaw.trim().slice(0, 500);
+                        const mode = document.querySelector('input[name="deco-split-mode"]:checked').value;
+                        const participantField = document.getElementById('deco-order-participant').value.trim();
+                        const topName = nameInput.value.trim();
+                        let sharedLabels = [];
+                        if (mode === 'shared_equal') {
+                            const raw = document.getElementById('deco-order-shared').value;
+                            sharedLabels = raw.split(/[\n,;]+/).map(function (s) { return s.trim(); }).filter(Boolean);
+                        }
+                        if (mode === 'individual' && !participantField) {
+                            alert('Indicá un nombre para este consumo.');
+                            return;
+                        }
+                        if (mode === 'shared_equal' && sharedLabels.length < 2) {
+                            alert('Para compartir, escribí al menos dos nombres.');
+                            return;
+                        }
+                        const productName = document.getElementById('deco-order-product-title').textContent || 'Producto';
+                        decoCart.push({
+                            id: 'c' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+                            product_id: currentProductId,
+                            product_name: productName,
+                            quantity: qty,
+                            split_mode: mode,
+                            participant_label: mode === 'individual' ? participantField : (topName || null),
+                            shared_with_labels: mode === 'shared_equal' ? sharedLabels : [],
+                            notes: notesTrim
+                        });
+                        try { localStorage.setItem(storageKey, nameInput.value.trim()); } catch (e) {}
+                        renderCart();
+                        dialog.close();
+                    });
+
+                    document.getElementById('deco-cart-clear')?.addEventListener('click', function () {
+                        if (decoCart.length === 0) return;
+                        if (confirm('¿Vaciar el pedido?')) {
+                            decoCart = [];
+                            renderCart();
+                        }
+                    });
+
+                    document.getElementById('deco-cart-submit')?.addEventListener('click', async function () {
+                        if (decoCart.length === 0) {
+                            alert('Agregá algo al pedido primero.');
+                            return;
+                        }
+                        const lines = decoCart.map(function (l) {
+                            return {
+                                product_id: l.product_id,
+                                quantity: l.quantity,
+                                split_mode: l.split_mode,
+                                participant_label: l.participant_label,
+                                shared_with_labels: l.shared_with_labels,
+                                notes: l.notes && l.notes.trim() !== '' ? l.notes.trim() : null
+                            };
+                        });
+                        try {
+                            const res = await fetch(submitUrl, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                                    'X-Requested-With': 'XMLHttpRequest'
+                                },
+                                body: JSON.stringify({ lines: lines })
+                            });
+                            const data = await res.json().catch(function () { return {}; });
+                            if (!res.ok) {
+                                alert(data.message || 'No se pudo enviar.');
+                                return;
+                            }
+                            decoCart = [];
+                            renderCart();
+                            if (toast) {
+                                toast.textContent = data.message || 'Pedido enviado.';
+                                toast.classList.remove('hidden');
+                                setTimeout(function () { toast.classList.add('hidden'); }, 5000);
+                            }
+                        } catch (e) {
+                            alert('Error de red. Intentá de nuevo.');
+                        }
+                    });
+                })();
+            </script>
         @endif
 
         <header class="text-center mb-10 sm:mb-14">
@@ -301,6 +639,17 @@
                                                     @endif
                                                 @endforeach
                                             </ul>
+                                        @endif
+                                        @if($menuOrderingEnabled && $menuOrderSubmitUrl)
+                                            <button
+                                                type="button"
+                                                class="menu-deco-add mt-3 w-full sm:w-auto rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:brightness-110 touch-manipulation"
+                                                style="background: var(--menu-accent);"
+                                                data-product-id="{{ $product->id }}"
+                                                data-product-name="{{ $product->name }}"
+                                            >
+                                                Agregar al pedido
+                                            </button>
                                         @endif
                                     </div>
                                 </div>
