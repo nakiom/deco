@@ -1,5 +1,8 @@
 <?php
 
+// Evita el ErrorException de tempnam() en PHP 8.4+
+putenv('TMPDIR='.__DIR__.'/../storage/framework/temp');
+
 use Illuminate\Foundation\Application;
 use Illuminate\Http\Request;
 

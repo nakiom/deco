@@ -1,0 +1,16 @@
+@import '../../../../vendor/filament/filament/resources/css/theme.css';
+
+@source '../../../../app/Filament/**/*';
+@source '../../../../resources/views/filament/**/*';
+
+/*
+ * Pedidos del salón: en algunos temas .fi-main hereda color claro y las tarjetas
+ * con fondo claro quedan con texto blanco. Restablecemos color de texto base.
+ */
+.fi-main .waiter-salon-ui {
+    color: rgb(15 23 42);
+}
+
+.dark .fi-main .waiter-salon-ui {
+    color: rgb(226 232 240);
+}
